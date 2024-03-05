@@ -1,6 +1,7 @@
 const http = require('http');
 const express = require('express');
 const { Client } = require('pg');
+const jwt = require('jsonwebtoken');
 const app = express();
 
 // Middleware to parse JSON bodies
@@ -22,12 +23,12 @@ client.connect()
 
         // Create the 'users' table if it doesn't exist
         const createTableQuery = `
-  CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,  -- Add UNIQUE constraint
-    password VARCHAR(255) NOT NULL
-    );
-    `;
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL
+            );
+        `;
         return client.query(createTableQuery);
     })
     .then(() => {
@@ -37,7 +38,23 @@ client.connect()
         console.error('Error connecting to the database:', err.stack);
     });
 
-// API to register a new user
+// Middleware to authenticate JWT tokens
+function authenticateToken(req, res, next) {
+    const token = req.headers['authorization'] && req.headers['authorization'].split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Access denied. No token provided.' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ error: 'Invalid or expired token.' });
+        }
+        req.user = user;
+        next();
+    });
+}
+
 // API to register a new user
 app.post('/register', (req, res) => {
     const { username, password } = req.body;
@@ -54,7 +71,7 @@ app.post('/register', (req, res) => {
                 return res.status(400).json({ error: 'Username already exists.' });
             }
 
-            // Insert the new user into the database if username is unique
+            // Insert the new user into the database if the username is unique
             const query = 'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *';
             return client.query(query, [username, password]);
         })
@@ -67,7 +84,7 @@ app.post('/register', (req, res) => {
         });
 });
 
-// API to authenticate a user
+// API to authenticate a user (login)
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
 
@@ -80,15 +97,28 @@ app.post('/login', (req, res) => {
     client.query(query, [username, password])
         .then((result) => {
             if (result.rows.length > 0) {
-                res.status(200).json({ message: 'Login successful' });
+                // If the user exists, issue a JWT token
+                const user = result.rows[0];
+                const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
+                
+                res.status(200).json({
+                    message: 'Login successful',
+                    token: token  // Send the token back to the client
+                });
             } else {
-                res.status(401).json({ error: 'Invalid username or password' });
+                res.status(401).json({ error: 'Invalid username or password. Please register first.' });
             }
         })
         .catch((err) => {
             console.error('Error authenticating user:', err.stack);
             res.status(500).json({ error: 'Error authenticating user' });
         });
+});
+
+// Example of a protected route
+app.get('/profile', authenticateToken, (req, res) => {
+    // Access the authenticated user information from the token
+    res.json({ message: 'This is your profile data', user: req.user });
 });
 
 // Create the server
