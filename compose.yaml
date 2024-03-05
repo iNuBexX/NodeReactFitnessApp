@@ -23,6 +23,7 @@ services:
       DB_USER: user
       DB_PASSWORD: userpassword
       DB_NAME: mydb
+      JWT_SECRET: your-very-secure-secret-key  # Add JWT_SECRET environment variable
     ports:
       - "3000:3000"
     depends_on:
@@ -31,7 +32,7 @@ services:
       - app-network
     volumes:
       - .:/app
-    command: ["npm", "start"]
+    command: ["sh", "-c", "export JWT_SECRET=$(openssl rand -base64 32) && npm start"]
 
 networks:
   app-network:
