@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login and Profile Example</title>
+</head>
+<body>
+
+    <h1>Login</h1>
+    <form id="login-form">
+        <label for="username">Username:</label>
+        <input type="text" id="username" required><br><br>
+        <label for="password">Password:</label>
+        <input type="password" id="password" required><br><br>
+        <button type="submit">Login</button>
+    </form>
+
+    <h2>Profile</h2>
+    <button id="get-profile" disabled>Get Profile</button>
+    <div id="profile-info"></div>
+
+    <script>
+        // Login form submission handler
+        document.getElementById('login-form').addEventListener('submit', function (event) {
+            event.preventDefault();  // Prevent form submission
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            // Send login request to the server
+            fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.token) {
+                    // Store the JWT token in localStorage
+                    localStorage.setItem('jwt', data.token);
+
+                    // Enable the 'Get Profile' button after login
+                    document.getElementById('get-profile').disabled = false;
+                    alert('Login successful!');
+                } else {
+                    alert('Invalid username or password');
+                }
+            })
+            .catch(err => {
+                console.error('Error logging in:', err);
+                alert('Error logging in');
+            });
+        });
+
+        // Fetch user profile on button click
+        document.getElementById('get-profile').addEventListener('click', function () {
+            const token = localStorage.getItem('jwt');
+
+            if (!token) {
+                alert('No token found! Please log in first.');
+                return;
+            }
+
+            // Send the token in the Authorization header to fetch profile
+            fetch('/profile', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,  // Attach JWT token in Authorization header
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.user) {
+                    // Display profile data
+                    document.getElementById('profile-info').innerHTML = `
+                        <p><strong>Username:</strong> ${data.user.username}</p>
+                        <p><strong>ID:</strong> ${data.user.id}</p>
+                    `;
+                } else {
+                    alert('Error fetching profile');
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching profile:', err);
+                alert('Error fetching profile');
+            });
+        });
+    </script>
+
+</body>
+</html>

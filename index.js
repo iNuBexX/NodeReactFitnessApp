@@ -3,6 +3,9 @@ const express = require('express');
 const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
 const app = express();
+const { passport, authenticateJwt } = require('./auth/passport');  
+
+app.use(passport.initialize());
 
 // Middleware to parse JSON bodies
 app.use(express.json());
@@ -38,22 +41,7 @@ client.connect()
         console.error('Error connecting to the database:', err.stack);
     });
 
-// Middleware to authenticate JWT tokens
-function authenticateToken(req, res, next) {
-    const token = req.headers['authorization'] && req.headers['authorization'].split(' ')[1];
 
-    if (!token) {
-        return res.status(401).json({ error: 'Access denied. No token provided.' });
-    }
-
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).json({ error: 'Invalid or expired token.' });
-        }
-        req.user = user;
-        next();
-    });
-}
 
 // API to register a new user
 app.post('/register', (req, res) => {
@@ -92,15 +80,14 @@ app.post('/login', (req, res) => {
         return res.status(400).json({ error: 'Username and password are required.' });
     }
 
-    // Authenticate the user
     const query = 'SELECT * FROM users WHERE username = $1 AND password = $2';
     client.query(query, [username, password])
         .then((result) => {
             if (result.rows.length > 0) {
-                // If the user exists, issue a JWT token
                 const user = result.rows[0];
                 const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
-                
+
+                // Send token in the response body
                 res.status(200).json({
                     message: 'Login successful',
                     token: token  // Send the token back to the client
@@ -115,11 +102,14 @@ app.post('/login', (req, res) => {
         });
 });
 
-// Example of a protected route
-app.get('/profile', authenticateToken, (req, res) => {
-    // Access the authenticated user information from the token
+app.get('/logout', (req, res)=>{ 
+
+});
+
+app.get('/profile',authenticateJwt, (req, res) => {
     res.json({ message: 'This is your profile data', user: req.user });
 });
+
 
 // Create the server
 const server = http.createServer(app);
