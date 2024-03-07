@@ -129,6 +129,21 @@
             .then(response => response.json())
             .then(data => {
                 if (data.user) {
+                    const profileInfo = document.getElementById('profile-info');
+                    profileInfo.innerHTML = ''; // Clear previous content
+
+                    const usernamePara = document.createElement('p');
+                    usernamePara.innerHTML = `<strong>Username:</strong> `;
+                    const usernameText = document.createTextNode(data.user.username);
+                    usernamePara.appendChild(usernameText);
+
+                    const idPara = document.createElement('p');
+                    idPara.innerHTML = `<strong>ID:</strong> `;
+                    const idText = document.createTextNode(data.user.id);
+                    idPara.appendChild(idText);
+
+                    profileInfo.appendChild(usernamePara);
+                    profileInfo.appendChild(idPara);
                     document.getElementById('profile-info').innerHTML = `
                         <p><strong>Username:</strong> ${data.user.username}</p>
                         <p><strong>ID:</strong> ${data.user.id}</p>
@@ -143,6 +158,5 @@
             });
         });
     </script>
-    <script>alert('XSS')</script>
 </body>
 </html>

@@ -79,33 +79,45 @@ app.post('/register', async (req, res) => {
 });
 
 // API to authenticate a user (login)
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password are required.' });
     }
-    
-    const query = 'SELECT * FROM users WHERE username = $1 AND password = $2';
-    client.query(query, [username, password])
-        .then((result) => {
-            if (result.rows.length > 0) {
-                const user = result.rows[0];
-                const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-                // Send token in the response body
-                res.status(200).json({
-                    message: 'Login successful',
-                    token: token  // Send the token back to the client
-                });
-            } else {
-                res.status(401).json({ error: 'Invalid username or password. Please register first.' });
-            }
-        })
-        .catch((err) => {
-            console.error('Error authenticating user:', err.stack);
-            res.status(500).json({ error: 'Error authenticating user' });
+    try {
+        // Fetch user by username
+        const query = 'SELECT * FROM users WHERE username = $1';
+        const result = await client.query(query, [username]);
+
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid username or password.' });
+        }
+
+        const user = result.rows[0];
+
+        // Use bcrypt to compare the plain password with the hashed password
+        const match = await bcrypt.compare(password, user.password);
+
+        if (!match) {
+            return res.status(401).json({ error: 'Invalid username or password.' });
+        }
+
+        // Generate JWT on successful login
+        const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, {
+            expiresIn: '1h'
         });
+
+        res.status(200).json({
+            message: 'Login successful',
+            token
+        });
+
+    } catch (err) {
+        console.error('Error during login:', err);
+        res.status(500).json({ error: 'Error logging in' });
+    }
 });
 
 app.get('/logout', (req, res)=>{ 
