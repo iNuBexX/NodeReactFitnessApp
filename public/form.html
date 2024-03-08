@@ -43,22 +43,13 @@
                 },
                 body: JSON.stringify({ username, password }),
             })
-            .then(async response => {
-                const contentType = response.headers.get('content-type');
-
+            .then(response => {
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || response.statusText);
+                    return response.text().then(text => { throw new Error(text || response.statusText); });
                 }
-
-                if (!contentType || !contentType.includes('application/json')) {
-                    const errorText = await response.text();
-                    throw new Error('Expected JSON, got: ' + errorText);
-                }
-
                 return response.json();
             })
-            .then(data => {
+            .then(() => {
                 alert('Sign-Up successful! Please log in.');
             })
             .catch(err => {
@@ -80,30 +71,17 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ username, password }),
+                credentials: 'include', // Important: send cookies with the request
             })
-            .then(async response => {
-                const contentType = response.headers.get('content-type');
-
+            .then(response => {
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || response.statusText);
+                    return response.text().then(text => { throw new Error(text || response.statusText); });
                 }
-
-                if (!contentType || !contentType.includes('application/json')) {
-                    const errorText = await response.text();
-                    throw new Error('Expected JSON, got: ' + errorText);
-                }
-
                 return response.json();
             })
-            .then(data => {
-                if (data.token) {
-                    localStorage.setItem('jwt', data.token);
-                    document.getElementById('get-profile').disabled = false;
-                    alert('Login successful!');
-                } else {
-                    alert('Unexpected response format.');
-                }
+            .then(() => {
+                document.getElementById('get-profile').disabled = false;
+                alert('Login successful!');
             })
             .catch(err => {
                 console.error('Error logging in:', err);
@@ -113,37 +91,13 @@
 
         // Fetch user profile on button click
         document.getElementById('get-profile').addEventListener('click', function () {
-            const token = localStorage.getItem('jwt');
-
-            if (!token) {
-                alert('No token found! Please log in first.');
-                return;
-            }
-
             fetch('http://localhost:3000/profile', {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
+                credentials: 'include', // Important: send cookies with the request
             })
             .then(response => response.json())
             .then(data => {
                 if (data.user) {
-                    const profileInfo = document.getElementById('profile-info');
-                    profileInfo.innerHTML = ''; // Clear previous content
-
-                    const usernamePara = document.createElement('p');
-                    usernamePara.innerHTML = `<strong>Username:</strong> `;
-                    const usernameText = document.createTextNode(data.user.username);
-                    usernamePara.appendChild(usernameText);
-
-                    const idPara = document.createElement('p');
-                    idPara.innerHTML = `<strong>ID:</strong> `;
-                    const idText = document.createTextNode(data.user.id);
-                    idPara.appendChild(idText);
-
-                    profileInfo.appendChild(usernamePara);
-                    profileInfo.appendChild(idPara);
                     document.getElementById('profile-info').innerHTML = `
                         <p><strong>Username:</strong> ${data.user.username}</p>
                         <p><strong>ID:</strong> ${data.user.id}</p>

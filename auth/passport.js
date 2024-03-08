@@ -1,8 +1,9 @@
 const passport = require('passport');
-const { Strategy: JwtStrategy, ExtractJwt } = require('passport-jwt');
+const { Strategy: JwtStrategy } = require('passport-jwt');
 const { Client } = require('pg');
 
-// PostgreSQL setup
+
+// PostgreSQL client setup
 const client = new Client({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -16,36 +17,34 @@ client.connect();
 
 // Passport JWT strategy options
 const opts = {
-    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    jwtFromRequest: (req) => req?.cookies?.token || null,  // ONLY from cookies
     secretOrKey: process.env.JWT_SECRET
 };
 
-// Custom JWT authentication strategy
+// Setup JWT authentication strategy
 passport.use(new JwtStrategy(opts, async (jwt_payload, done) => {
     try {
         const result = await client.query('SELECT * FROM users WHERE id = $1', [jwt_payload.id]);
-
         if (result.rows.length > 0) {
-            return done(null, result.rows[0]);  // User found, attaching to req.user
+            console.log(`User found: ${result.rows[0].username}`);
+            return done(null, result.rows[0]);  // Attach user to req.user
         } else {
-            return done(null, false);           // User not found
+            return done(null, false);           // No user found
         }
     } catch (err) {
-        return done(err, false);               // Error occurred
+        return done(err, false);                // Error during lookup
     }
 }));
 
-// Custom authentication callback function
+// Middleware to protect routes
 const authenticateJwt = (req, res, next) => {
     passport.authenticate('jwt', { session: false }, (err, user, info) => {
-        if (err) return next(err);  // Pass any errors to Express error handler
-        if (!user) {
-            return res.status(401).json({ message: info?.message || 'Unauthorized' });
-        }
+        if (err) return next(err);
+        if (!user) return res.status(401).json({ message: info?.message || 'Unauthorized' });
 
-        req.user = user;  // Attach user info to req
-        next();  // Continue to the next middleware or route handler
-    })(req, res, next);  // Execute passport.authenticate with the request, response, and next parameters
+        req.user = user;
+        next();
+    })(req, res, next);
 };
 
 module.exports = {

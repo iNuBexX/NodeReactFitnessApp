@@ -2,137 +2,130 @@ const http = require('http');
 const express = require('express');
 const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
-const app = express();
-const { passport, authenticateJwt } = require('./auth/passport');  
-const bcrypt = require('bcrypt');
-const saltRounds = 10; // Higher = more secure, but slower
+const cookieParser = require('cookie-parser');
 const cors = require('cors');
+const bcrypt = require('bcrypt');
+const app = express();
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
 
+const { passport, authenticateJwt } = require('./auth/passport');
+
+console.log(`done generatiung jwt secret`);
+// Middlewares
+app.use(cors({
+    origin: ['http://localhost:5500', 'http://127.0.0.1:5500','*'],
+    credentials: true   // Important: allow sending cookies from frontend
+}));
+app.use(express.json());
+app.use(cookieParser());
 app.use(passport.initialize());
 
-// Middleware to parse JSON bodies
-app.use(express.json());
-app.use(cors({
-    origin: ['http://localhost:5500', 'http://127.0.0.1:5500'],
-  }));
-// PostgreSQL database connection configuration
+// PostgreSQL client setup
 const client = new Client({
-    host: process.env.DB_HOST,  // 'db' (service name defined in Docker Compose)
+    host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     port: 5432
 });
 
-// Connect to the database
+// Connect to database and ensure users table
 client.connect()
     .then(() => {
-        console.log('Connected to the PostgreSQL database.');
-
-        // Create the 'users' table if it doesn't exist
-        const createTableQuery = `
+        console.log('Connected to PostgreSQL');
+        return client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
-                username VARCHAR(255) NOT NULL UNIQUE,
+                username VARCHAR(255) UNIQUE NOT NULL,
                 password VARCHAR(255) NOT NULL
             );
-        `;
-        return client.query(createTableQuery);
+        `);
     })
     .then(() => {
-        console.log('Users table created or already exists.');
+        console.log('Users table ready.');
     })
     .catch((err) => {
-        console.error('Error connecting to the database:', err.stack);
+        console.error('Database connection error:', err.stack);
     });
 
-
-
-// API to register a new user
+// Register new user
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password are required.' });
-    }
+    if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
 
     try {
-        // Check if the username is already taken
-        const checkUserQuery = 'SELECT * FROM users WHERE username = $1';
-        const existingUser = await client.query(checkUserQuery, [username]);
-
-        if (existingUser.rows.length > 0) {
-            return res.status(400).json({ error: 'Username already exists. Please choose another one.' });
+        const userExists = await client.query('SELECT * FROM users WHERE username = $1', [username]);
+        if (userExists.rows.length > 0) {
+            return res.status(400).json({ error: 'Username already exists.' });
         }
 
-        // Hash the password before storing it
         const hashedPassword = await bcrypt.hash(password, 10);
-        const insertUserQuery = 'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *';
-        const result = await client.query(insertUserQuery, [username, hashedPassword]);
+        const newUser = await client.query(
+            'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *',
+            [username, hashedPassword]
+        );
 
-        res.status(201).json({ message: 'User registered successfully', user: result.rows[0] });
-
+        res.status(201).json({ message: 'User registered successfully', user: newUser.rows[0] });
     } catch (err) {
-        console.error('Error registering user:', err);
-        res.status(500).json({ error: 'Error registering user' });
+        console.error('Registration error:', err);
+        res.status(500).json({ error: 'Registration failed' });
     }
 });
 
-// API to authenticate a user (login)
+// Login user
 app.post('/login', async (req, res) => {
     const { username, password } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password are required.' });
-    }
+    if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
 
     try {
-        // Fetch user by username
-        const query = 'SELECT * FROM users WHERE username = $1';
-        const result = await client.query(query, [username]);
-
+        const result = await client.query('SELECT * FROM users WHERE username = $1', [username]);
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'Invalid username or password.' });
         }
 
         const user = result.rows[0];
+        const validPassword = await bcrypt.compare(password, user.password);
 
-        // Use bcrypt to compare the plain password with the hashed password
-        const match = await bcrypt.compare(password, user.password);
-
-        if (!match) {
+        if (!validPassword) {
             return res.status(401).json({ error: 'Invalid username or password.' });
         }
 
-        // Generate JWT on successful login
-        const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, {
-            expiresIn: '1h'
+        // Generate JWT and store it in cookie
+        const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+        res.cookie('token', token, {
+            httpOnly: true,
+            //secure: false, //process.env.NODE_ENV === 'production', // Only over HTTPS in production
+            //sameSite: 'none',
+            //maxAge: 3600000 // 1 hour
         });
 
-        res.status(200).json({
-            message: 'Login successful',
-            token
-        });
-
+        res.status(200).json({ message: 'Login successful' });
     } catch (err) {
-        console.error('Error during login:', err);
-        res.status(500).json({ error: 'Error logging in' });
+        console.error('Login error:', err);
+        res.status(500).json({ error: 'Login failed' });
     }
 });
 
-app.get('/logout', (req, res)=>{ 
-
+// Logout user (clear cookie)
+app.post('/logout', (req, res) => {
+    res.clearCookie('token', {
+        httpOnly: true,
+        //secure: process.env.NODE_ENV === 'production',
+        //sameSite: 'Strict'
+    });
+    res.status(200).json({ message: 'Logged out successfully' });
 });
 
-app.get('/profile',authenticateJwt, (req, res) => {
+// Protected route
+app.get('/profile', authenticateJwt, (req, res) => {
     res.json({ message: 'This is your profile data', user: req.user });
 });
 
-
-// Create the server
+// Create and start server
 const server = http.createServer(app);
 
-// Start the server
 server.listen(3000, () => {
-    console.log('Server running at http://localhost:3000/');
+    console.log('Server runaning at http://localhost:3000/');
 });
