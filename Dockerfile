@@ -1,20 +1,19 @@
-# Use an official Node.js runtime as the base image
-FROM node:14
+# Use an official Node.js runtime (Latest LTS version recommended)
+FROM node:20
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the package.json and package-lock.json to the container
-COPY package*.json ./
-
-# Install the dependencies defined in package.json
-RUN npm install
-
-# Copy the rest of your app's code into the container
+# Copy all necessary files to the container at once
 COPY . .
 
-# Expose the port the app will run on (same as in docker-compose)
+RUN rm -rf node_modules package-lock.json
+# Install dependencies (bcrypt will be installed correctly)
+RUN npm install && npm rebuild bcrypt --build-from-source
+#RUN npm install -g nodemon
+# Expose the application port
 EXPOSE 3000
 
-# Define the command to run your app
-CMD ["npm", "start"]
+# Start the application
+#CMD ["npm", "start"]
+#CMD ["node", "index.js"]

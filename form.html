@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login and Profile Example</title>
 </head>
 <body>
 
+    <h1>Sign Up</h1>
+    <form id="signup-form">
+        <label for="signup-username">Username:</label>
+        <input type="text" id="signup-username" required><br><br>
+        <label for="signup-password">Password:</label>
+        <input type="password" id="signup-password" required><br><br>
+        <button type="submit">Sign Up</button>
+    </form>
+
     <h1>Login</h1>
     <form id="login-form">
-        <label for="username">Username:</label>
-        <input type="text" id="username" required><br><br>
-        <label for="password">Password:</label>
-        <input type="password" id="password" required><br><br>
+        <label for="login-username">Username:</label>
+        <input type="text" id="login-username" required><br><br>
+        <label for="login-password">Password:</label>
+        <input type="password" id="login-password" required><br><br>
         <button type="submit">Login</button>
     </form>
 
@@ -21,37 +29,85 @@
     <div id="profile-info"></div>
 
     <script>
-        // Login form submission handler
-        document.getElementById('login-form').addEventListener('submit', function (event) {
-            event.preventDefault();  // Prevent form submission
+        // Sign-Up form submission handler
+        document.getElementById('signup-form').addEventListener('submit', function (event) {
+            event.preventDefault();
 
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+            const username = document.getElementById('signup-username').value;
+            const password = document.getElementById('signup-password').value;
 
-            // Send login request to the server
-            fetch('/login', {
+            fetch('http://localhost:3000/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ username, password }),
             })
-            .then(response => response.json())
+            .then(async response => {
+                const contentType = response.headers.get('content-type');
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || response.statusText);
+                }
+
+                if (!contentType || !contentType.includes('application/json')) {
+                    const errorText = await response.text();
+                    throw new Error('Expected JSON, got: ' + errorText);
+                }
+
+                return response.json();
+            })
+            .then(data => {
+                alert('Sign-Up successful! Please log in.');
+            })
+            .catch(err => {
+                console.error('Error signing up:', err);
+                alert('Sign-Up failed: ' + err.message);
+            });
+        });
+
+        // Login form submission handler
+        document.getElementById('login-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            fetch('http://localhost:3000/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            })
+            .then(async response => {
+                const contentType = response.headers.get('content-type');
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || response.statusText);
+                }
+
+                if (!contentType || !contentType.includes('application/json')) {
+                    const errorText = await response.text();
+                    throw new Error('Expected JSON, got: ' + errorText);
+                }
+
+                return response.json();
+            })
             .then(data => {
                 if (data.token) {
-                    // Store the JWT token in localStorage
                     localStorage.setItem('jwt', data.token);
-
-                    // Enable the 'Get Profile' button after login
                     document.getElementById('get-profile').disabled = false;
                     alert('Login successful!');
                 } else {
-                    alert('Invalid username or password');
+                    alert('Unexpected response format.');
                 }
             })
             .catch(err => {
                 console.error('Error logging in:', err);
-                alert('Error logging in');
+                alert('Login failed: ' + err.message);
             });
         });
 
@@ -64,31 +120,29 @@
                 return;
             }
 
-            // Send the token in the Authorization header to fetch profile
-            fetch('/profile', {
+            fetch('http://localhost:3000/profile', {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${token}`,  // Attach JWT token in Authorization header
+                    'Authorization': `Bearer ${token}`,
                 },
             })
             .then(response => response.json())
             .then(data => {
                 if (data.user) {
-                    // Display profile data
                     document.getElementById('profile-info').innerHTML = `
                         <p><strong>Username:</strong> ${data.user.username}</p>
                         <p><strong>ID:</strong> ${data.user.id}</p>
                     `;
                 } else {
-                    alert('Error fetching profile');
+                    alert('Error fetching profile.');
                 }
             })
             .catch(err => {
                 console.error('Error fetching profile:', err);
-                alert('Error fetching profile');
+                alert('Error fetching profile.');
             });
         });
     </script>
-
+    <script>alert('XSS')</script>
 </body>
 </html>

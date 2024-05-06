@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   db:
     image: postgres:13
@@ -14,14 +16,16 @@ services:
       - db_data:/var/lib/postgresql/data
 
   app:
-    build: .
+    build:
+      context: .
+      platforms: ["linux/amd64"]  # Ensure correct architecture
     container_name: node_app
     environment:
       DB_HOST: db
       DB_USER: user
       DB_PASSWORD: userpassword
       DB_NAME: mydb
-      JWT_SECRET: your-very-secure-secret-key  # Add JWT_SECRET environment variable
+      JWT_SECRET: your-very-secure-secret-key
     ports:
       - "3000:3000"
     depends_on:
@@ -30,6 +34,7 @@ services:
       - app-network
     volumes:
       - .:/app
+      - /app/node_modules # Ensure dependencies are installed inside the container
     command: ["sh", "-c", "export JWT_SECRET=$(openssl rand -base64 32) && npm start"]
 
 networks:

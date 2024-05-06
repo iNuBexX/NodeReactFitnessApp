@@ -4,6 +4,8 @@ const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
 const app = express();
 const { passport, authenticateJwt } = require('./auth/passport');  
+const bcrypt = require('bcrypt');
+const saltRounds = 10; // Higher = more secure, but slower
 
 app.use(passport.initialize());
 
@@ -44,32 +46,33 @@ client.connect()
 
 
 // API to register a new user
-app.post('/register', (req, res) => {
+app.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password are required.' });
     }
 
-    // Check if the username already exists
-    const checkUserQuery = 'SELECT * FROM users WHERE username = $1';
-    client.query(checkUserQuery, [username])
-        .then((result) => {
-            if (result.rows.length > 0) {
-                return res.status(400).json({ error: 'Username already exists.' });
-            }
+    try {
+        // Check if the username is already taken
+        const checkUserQuery = 'SELECT * FROM users WHERE username = $1';
+        const existingUser = await client.query(checkUserQuery, [username]);
 
-            // Insert the new user into the database if the username is unique
-            const query = 'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *';
-            return client.query(query, [username, password]);
-        })
-        .then((result) => {
-            res.status(201).json({ message: 'User registered successfully', user: result.rows[0] });
-        })
-        .catch((err) => {
-            console.error('Error registering user:', err.stack);
-            res.status(500).json({ error: 'Error registering user' });
-        });
+        if (existingUser.rows.length > 0) {
+            return res.status(400).json({ error: 'Username already exists. Please choose another one.' });
+        }
+
+        // Hash the password before storing it
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const insertUserQuery = 'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *';
+        const result = await client.query(insertUserQuery, [username, hashedPassword]);
+
+        res.status(201).json({ message: 'User registered successfully', user: result.rows[0] });
+
+    } catch (err) {
+        console.error('Error registering user:', err);
+        res.status(500).json({ error: 'Error registering user' });
+    }
 });
 
 // API to authenticate a user (login)
