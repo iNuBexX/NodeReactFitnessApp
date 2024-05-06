@@ -6,12 +6,15 @@ const app = express();
 const { passport, authenticateJwt } = require('./auth/passport');  
 const bcrypt = require('bcrypt');
 const saltRounds = 10; // Higher = more secure, but slower
+const cors = require('cors');
 
 app.use(passport.initialize());
 
 // Middleware to parse JSON bodies
 app.use(express.json());
-
+app.use(cors({
+    origin: ['http://localhost:5500', 'http://127.0.0.1:5500'],
+  }));
 // PostgreSQL database connection configuration
 const client = new Client({
     host: process.env.DB_HOST,  // 'db' (service name defined in Docker Compose)
@@ -82,7 +85,7 @@ app.post('/login', (req, res) => {
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password are required.' });
     }
-
+    
     const query = 'SELECT * FROM users WHERE username = $1 AND password = $2';
     client.query(query, [username, password])
         .then((result) => {
