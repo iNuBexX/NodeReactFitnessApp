@@ -4,12 +4,15 @@ const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
 const app = express();
 const { passport, authenticateJwt } = require('./auth/passport');  
+const cors = require('cors');
 
 app.use(passport.initialize());
 
 // Middleware to parse JSON bodies
 app.use(express.json());
-
+app.use(cors({
+    origin: ['http://localhost:5500', 'http://127.0.0.1:5500'],
+  }));
 // PostgreSQL database connection configuration
 const client = new Client({
     host: process.env.DB_HOST,  // 'db' (service name defined in Docker Compose)
